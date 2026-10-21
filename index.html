@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deriv Digit Analyzer - Refined Thresholds</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-blue: #3b82f6;
+            --border-color: #334155;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+        }
+        .container { max-width: 1000px; margin: 0 auto; }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 15px;
+        }
+        h1 { font-size: 1.5rem; margin: 0; }
+        .controls { display: flex; gap: 15px; align-items: center; }
+        select, button {
+            background: var(--card-bg);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        select:hover, button:hover { border-color: var(--accent-blue); }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 20px;
+        }
+        .card h3 { margin-top: 0; color: var(--text-muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-value { font-size: 1.8rem; font-weight: bold; margin: 10px 0; }
+        .digits-table {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            text-align: center;
+        }
+        .digit-box {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            border-radius: 6px;
+        }
+        .digit-num { font-size: 0.8rem; color: var(--text-muted); }
+        .digit-pct { font-size: 1.1rem; font-weight: bold; margin-top: 4px; }
+        .alert-box {
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-weight: bold;
+            text-align: center;
+        }
+        .alert-safe { background-color: rgba(34, 197, 94, 0.1); border: 1px solid var(--accent-green); color: var(--accent-green); }
+        .alert-warning { background-color: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-red); color: var(--accent-red); }
+        .connection-status { font-size: 0.8rem; padding: 4px 8px; border-radius: 4px; }
+        .status-connected { background: rgba(34, 197, 94, 0.2); color: var(--accent-green); }
+        .status-disconnected { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div>
+            <h1>Deriv Digit Analyzer</h1>
+            <span id="connectionStatus" class="connection-status status-disconnected">Disconnected</span>
+        </div>
+        <div class="controls">
+            <select id="marketSelect">
+                <option value="R_10">Volatility 10 Index</option>
+                <option value="R_25">Volatility 25 Index</option>
+                <option value="R_50" selected>Volatility 50 Index</option>
+                <option value="R_75">Volatility 75 Index</option>
+                <option value="R_100">Volatility 100 Index</option>
+                <option value="1HZ10V">Volatility 10 (1s) Index</option>
+                <option value="1HZ50V">Volatility 50 (1s) Index</option>
+            </select>
+            <select id="sampleSizeSelect">
+                <option value="10">Last 10 Ticks</option>
+                <option value="20">Last 20 Ticks</option>
+                <option value="50" selected>Last 50 Ticks</option>
+                <option value="100">Last 100 Ticks</option>
+                <option value="200">Last 200 Ticks</option>
+                <option value="300">Last 300 Ticks</option>
+                <option value="500">Last 500 Ticks</option>
+            </select>
+            <button id="reconnectBtn">Reconnect</button>
+        </div>
+    </header>
+
+    <div class="grid">
+        <!-- Low Brackets (Over 1 Setup) -->
+        <div class="card">
+            <h3>Low Brackets (0 - 4)</h3>
+            <div>0 & 1 Cumulative: <span id="cum01" class="stat-value">0.0%</span></div>
+            <div>0 to 4 Cumulative: <span id="cum04" class="stat-value">0.0%</span></div>
+            <div id="lowAlert" class="alert-box alert-safe">Status: Normal</div>
+        </div>
+
+        <!-- High Brackets (Under 8 Setup) -->
+        <div class="card">
+            <h3>High Brackets (5 - 9)</h3>
+            <div>8 & 9 Cumulative: <span id="cum89" class="stat-value">0.0%</span></div>
+            <div>5 to 9 Cumulative: <span id="cum59" class="stat-value">0.0%</span></div>
+            <div id="highAlert" class="alert-box alert-safe">Status: Normal</div>
+        </div>
+    </div>
+
+    <!-- Individual Digits breakdown -->
+    <div class="card">
+        <h3>Individual Digit Frequencies (Sample Window: <span id="windowDisplay">50</span> ticks) | Latest Digit: <span id="latestDigit" style="color:var(--accent-blue);">-</span></h3>
+        <div class="digits-table" id="digitsTable"></div>
+    </div>
+</div>
+
+<script>
+    const APP_ID = 1089;
+    let ws;
+    let ticksHistory = [];
+    let maxSampleSize = 50;
+    let currentSymbol = "R_50";
+
+    const connectionStatus = document.getElementById('connectionStatus');
+    const marketSelect = document.getElementById('marketSelect');
+    const sampleSizeSelect = document.getElementById('sampleSizeSelect');
+    const reconnectBtn = document.getElementById('reconnectBtn');
+    
+    const cum01El = document.getElementById('cum01');
+    const cum04El = document.getElementById('cum04');
+    const cum89El = document.getElementById('cum89');
+    const cum59El = document.getElementById('cum59');
+    const lowAlert = document.getElementById('lowAlert');
+    const highAlert = document.getElementById('highAlert');
+    const digitsTable = document.getElementById('digitsTable');
+    const windowDisplay = document.getElementById('windowDisplay');
+    const latestDigitEl = document.getElementById('latestDigit');
+
+    function initDigitTable() {
+        digitsTable.innerHTML = '';
+        for (let i = 0; i <= 9; i++) {
+            digitsTable.innerHTML += `
+                <div class="digit-box">
+                    <div class="digit-num">Digit ${i}</div>
+                    <div class="digit-pct" id="digPct_${i}">0.0%</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;" id="digCount_${i}">(0)</div>
+                </div>
+            `;
+        }
+    }
+
+    function connectWebSocket() {
+        connectionStatus.textContent = "Connecting...";
+        connectionStatus.className = "connection-status";
+
+        ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
+
+        ws.onopen = function() {
+            connectionStatus.textContent = "Connected";
+            connectionStatus.className = "connection-status status-connected";
+            subscribeToTicks(currentSymbol);
+        };
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            if (data.msg_type === 'history') {
+                ticksHistory = [];
+                data.history.prices.forEach(price => {
+                    ticksHistory.push(extractLastDigit(price));
+                });
+                updateAnalysis();
+            }
+
+            if (data.msg_type === 'tick') {
+                const digit = extractLastDigit(data.tick.quote);
+                ticksHistory.push(digit);
+                if (ticksHistory.length > 500) ticksHistory.shift();
+                latestDigitEl.textContent = digit;
+                updateAnalysis();
+            }
+        };
+
+        ws.onerror = () => { connectionStatus.textContent = "Error"; connectionStatus.className = "connection-status status-disconnected"; };
+        ws.onclose = () => { connectionStatus.textContent = "Disconnected"; connectionStatus.className = "connection-status status-disconnected"; };
+    }
+
+    function extractLastDigit(priceString) {
+        return parseInt(priceString.toString().slice(-1), 10);
+    }
+
+    function subscribeToTicks(symbol) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ ticks: symbol }));
+        }
+    }
+
+    function updateAnalysis() {
+        const activeWindow = ticksHistory.slice(-maxSampleSize);
+        const total = activeWindow.length;
+        windowDisplay.textContent = total;
+
+        if (total === 0) return;
+
+        const counts = Array(10).fill(0);
+        activeWindow.forEach(d => counts[d]++);
+
+        for (let i = 0; i <= 9; i++) {
+            const pct = ((counts[i] / total) * 100).toFixed(1);
+            document.getElementById(`digPct_${i}`).textContent = pct + '%';
+            document.getElementById(`digCount_${i}`).textContent = `(${counts[i]})`;
+        }
+
+        const pct01 = ((counts[0] + counts[1]) / total) * 100;
+        const pct04 = ((counts[0] + counts[1] + counts[2] + counts[3] + counts[4]) / total) * 100;
+        const pct89 = ((counts[8] + counts[9]) / total) * 100;
+        const pct59 = ((counts[5] + counts[6] + counts[7] + counts[8] + counts[9]) / total) * 100;
+
+        cum01El.textContent = pct01.toFixed(1) + '%';
+        cum04El.textContent = pct04.toFixed(1) + '%';
+        cum89El.textContent = pct89.toFixed(1) + '%';
+        cum59El.textContent = pct59.toFixed(1) + '%';
+
+        // --- UPDATED THRESHOLD & WARNING LOGIC ---
+
+        // Low Side (Over 1 setup)
+        if (pct04 > 50.0) {
+            lowAlert.className = "alert-box alert-warning";
+            lowAlert.textContent = "WARNING: 0-4 > 50% (Trending Up! Stop/Do Not Recover)";
+        } else if (pct01 <= 19.0 && pct04 <= 49.0) {
+            lowAlert.className = "alert-box alert-safe";
+            lowAlert.textContent = "SIGNAL: 0&1 <= 19% & 0-4 <= 49% -> Good for OVER 1";
+        } else {
+            lowAlert.className = "alert-box alert-safe";
+            lowAlert.textContent = "Status: Normal (Balanced)";
+        }
+
+        // High Side (Under 8 setup)
+        if (pct59 > 50.0) {
+            highAlert.className = "alert-box alert-warning";
+            highAlert.textContent = "WARNING: 5-9 > 50% (Trending Up! Stop/Do Not Recover)";
+        } else if (pct89 <= 19.0 && pct59 <= 49.0) {
+            highAlert.className = "alert-box alert-safe";
+            highAlert.textContent = "SIGNAL: 8&9 <= 19% & 5-9 <= 49% -> Good for UNDER 8";
+        } else {
+            highAlert.className = "alert-box alert-safe";
+            highAlert.textContent = "Status: Normal (Balanced)";
+        }
+    }
+
+    marketSelect.addEventListener('change', (e) => {
+        currentSymbol = e.target.value;
+        if (ws) ws.close();
+        connectWebSocket();
+    });
+
+    sampleSizeSelect.addEventListener('change', (e) => {
+        maxSampleSize = parseInt(e.target.value, 10);
+        updateAnalysis();
+    });
+
+    reconnectBtn.addEventListener('click', () => {
+        if (ws) ws.close();
+        connectWebSocket();
+    });
+
+    initDigitTable();
+    connectWebSocket();
+</script>
+
+</body>
+</html>
