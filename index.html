@@ -177,15 +177,22 @@
     }
 
     function connectWebSocket() {
-        connectionStatus.textContent = "Connecting...";
-        connectionStatus.className = "connection-status";
+    connectionStatus.textContent = "Connecting...";
+    connectionStatus.className = "connection-status";
 
+    try {
         ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
         ws.onopen = function() {
             connectionStatus.textContent = "Connected";
             connectionStatus.className = "connection-status status-connected";
-            subscribeToTicks(currentSymbol);
+            
+            // Send subscription request immediately upon opening
+            const subscribeRequest = {
+                ticks: currentSymbol,
+                subscribe: 1
+            };
+            ws.send(JSON.stringify(subscribeRequest));
         };
 
         ws.onmessage = function(event) {
@@ -193,9 +200,11 @@
             
             if (data.msg_type === 'history') {
                 ticksHistory = [];
-                data.history.prices.forEach(price => {
-                    ticksHistory.push(extractLastDigit(price));
-                });
+                if (data.history && data.history.prices) {
+                    data.history.prices.forEach(price => {
+                        ticksHistory.push(extractLastDigit(price));
+                    });
+                }
                 updateAnalysis();
             }
 
@@ -207,6 +216,22 @@
                 updateAnalysis();
             }
         };
+
+        ws.onerror = function(error) {
+            connectionStatus.textContent = "Error";
+            connectionStatus.className = "connection-status";
+        };
+
+        ws.onclose = function() {
+            connectionStatus.textContent = "Disconnected";
+            connectionStatus.className = "connection-status";
+        };
+
+    } catch (e) {
+        connectionStatus.textContent = "Failed";
+    }
+}
+
 
         ws.onerror = () => { connectionStatus.textContent = "Error"; connectionStatus.className = "connection-status status-disconnected"; };
         ws.onclose = () => { connectionStatus.textContent = "Disconnected"; connectionStatus.className = "connection-status status-disconnected"; };
