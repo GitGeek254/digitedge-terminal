@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DigitEdge Terminal - Deriv Digit Analyzer</title>
+    <title>DigitEdge Terminal - LIVE</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -31,7 +31,7 @@
             border-bottom: 1px solid var(--border-color);
             padding-bottom: 15px;
         }
-        h1 { font-size: 1.5rem; margin: 0; }
+        h1 { font-size: 1.5rem; margin: 0; color: #38bdf8; }
         .controls { display: flex; gap: 15px; align-items: center; }
         select, button {
             background: var(--card-bg);
@@ -80,7 +80,7 @@
         }
         .alert-safe { background-color: rgba(34, 197, 94, 0.1); border: 1px solid var(--accent-green); color: var(--accent-green); }
         .alert-warning { background-color: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-red); color: var(--accent-red); }
-        .connection-status { font-size: 0.8rem; padding: 4px 8px; border-radius: 4px; }
+        .connection-status { font-size: 0.8rem; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
         .status-connected { background: rgba(34, 197, 94, 0.2); color: var(--accent-green); }
         .status-disconnected { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
     </style>
@@ -90,7 +90,7 @@
 <div class="container">
     <header>
         <div>
-            <h1>DigitEdge Terminal</h1>
+            <h1>DigitEdge Terminal (LIVE)</h1>
             <span id="connectionStatus" class="connection-status status-disconnected">Disconnected</span>
         </div>
         <div class="controls">
@@ -117,7 +117,6 @@
     </header>
 
     <div class="grid">
-        <!-- Low Brackets (Over 1 Setup) -->
         <div class="card">
             <h3>Low Brackets (0 - 4)</h3>
             <div>0 & 1 Cumulative: <span id="cum01" class="stat-value">0.0%</span></div>
@@ -125,7 +124,6 @@
             <div id="lowAlert" class="alert-box alert-safe">Status: Normal</div>
         </div>
 
-        <!-- High Brackets (Under 8 Setup) -->
         <div class="card">
             <h3>High Brackets (5 - 9)</h3>
             <div>8 & 9 Cumulative: <span id="cum89" class="stat-value">0.0%</span></div>
@@ -134,7 +132,6 @@
         </div>
     </div>
 
-    <!-- Individual Digits breakdown -->
     <div class="card">
         <h3>Individual Digit Frequencies (Sample Window: <span id="windowDisplay">50</span> ticks) | Latest Digit: <span id="latestDigit" style="color:var(--accent-blue);">-</span></h3>
         <div class="digits-table" id="digitsTable"></div>
@@ -142,7 +139,6 @@
 </div>
 
 <script>
-    // Using standard numeric App ID for reliable public websocket streaming
     const APP_ID = 1089;
     let ws;
     let ticksHistory = [];
@@ -182,18 +178,17 @@
         connectionStatus.className = "connection-status";
 
         try {
-            ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
+            // Using binaryws.com public production endpoint for maximum stability
+            ws = new WebSocket(`wss://ws.binaryws.com/websockets/v3?app_id=${APP_ID}`);
 
             ws.onopen = function() {
                 connectionStatus.textContent = "Connected";
                 connectionStatus.className = "connection-status status-connected";
                 
-                // Send subscription request immediately upon opening
-                const subscribeRequest = {
+                ws.send(JSON.stringify({
                     ticks: currentSymbol,
                     subscribe: 1
-                };
-                ws.send(JSON.stringify(subscribeRequest));
+                }));
             };
 
             ws.onmessage = function(event) {
@@ -218,7 +213,7 @@
                 }
             };
 
-            ws.onerror = function(error) {
+            ws.onerror = function() {
                 connectionStatus.textContent = "Error";
                 connectionStatus.className = "connection-status status-disconnected";
             };
@@ -264,12 +259,9 @@
         cum89El.textContent = pct89.toFixed(1) + '%';
         cum59El.textContent = pct59.toFixed(1) + '%';
 
-        // --- THRESHOLD & WARNING LOGIC ---
-
-        // Low Side (Over 1 setup: Trigger when 0&1 <= 19% and 0-4 <= 49%)
         if (pct04 > 50.0) {
             lowAlert.className = "alert-box alert-warning";
-            lowAlert.textContent = "WARNING: 0-4 > 50% (Trending Up! Stop/Do Not Recover)";
+            lowAlert.textContent = "WARNING: 0-4 > 50% (Trending Up!)";
         } else if (pct01 <= 19.0 && pct04 <= 49.0) {
             lowAlert.className = "alert-box alert-safe";
             lowAlert.textContent = "SIGNAL: 0&1 <= 19% & 0-4 <= 49% -> Good for OVER 1";
@@ -278,10 +270,9 @@
             lowAlert.textContent = "Status: Normal (Balanced)";
         }
 
-        // High Side (Under 8 setup: Trigger when 8&9 <= 19% and 5-9 <= 49%)
         if (pct59 > 50.0) {
             highAlert.className = "alert-box alert-warning";
-            highAlert.textContent = "WARNING: 5-9 > 50% (Trending Up! Stop/Do Not Recover)";
+            highAlert.textContent = "WARNING: 5-9 > 50% (Trending Up!)";
         } else if (pct89 <= 19.0 && pct59 <= 49.0) {
             highAlert.className = "alert-box alert-safe";
             highAlert.textContent = "SIGNAL: 8&9 <= 19% & 5-9 <= 49% -> Good for UNDER 8";
