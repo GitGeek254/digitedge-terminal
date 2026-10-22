@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Deriv Digit Analyzer - Refined Thresholds</title>
+    <title>DigitEdge Terminal - Deriv Digit Analyzer</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -90,7 +90,7 @@
 <div class="container">
     <header>
         <div>
-            <h1>Deriv Digit Analyzer</h1>
+            <h1>DigitEdge Terminal</h1>
             <span id="connectionStatus" class="connection-status status-disconnected">Disconnected</span>
         </div>
         <div class="controls">
@@ -142,7 +142,8 @@
 </div>
 
 <script>
-    const APP_ID = '34JX8PmJBqIraQLfDVHYy';
+    // Using standard numeric App ID for reliable public websocket streaming
+    const APP_ID = 1089;
     let ws;
     let ticksHistory = [];
     let maxSampleSize = 50;
@@ -177,74 +178,64 @@
     }
 
     function connectWebSocket() {
-    connectionStatus.textContent = "Connecting...";
-    connectionStatus.className = "connection-status";
+        connectionStatus.textContent = "Connecting...";
+        connectionStatus.className = "connection-status";
 
-    try {
-        ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
+        try {
+            ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
-        ws.onopen = function() {
-            connectionStatus.textContent = "Connected";
-            connectionStatus.className = "connection-status status-connected";
-            
-            // Send subscription request immediately upon opening
-            const subscribeRequest = {
-                ticks: currentSymbol,
-                subscribe: 1
+            ws.onopen = function() {
+                connectionStatus.textContent = "Connected";
+                connectionStatus.className = "connection-status status-connected";
+                
+                // Send subscription request immediately upon opening
+                const subscribeRequest = {
+                    ticks: currentSymbol,
+                    subscribe: 1
+                };
+                ws.send(JSON.stringify(subscribeRequest));
             };
-            ws.send(JSON.stringify(subscribeRequest));
-        };
 
-        ws.onmessage = function(event) {
-            const data = JSON.parse(event.data);
-            
-            if (data.msg_type === 'history') {
-                ticksHistory = [];
-                if (data.history && data.history.prices) {
-                    data.history.prices.forEach(price => {
-                        ticksHistory.push(extractLastDigit(price));
-                    });
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                
+                if (data.msg_type === 'history') {
+                    ticksHistory = [];
+                    if (data.history && data.history.prices) {
+                        data.history.prices.forEach(price => {
+                            ticksHistory.push(extractLastDigit(price));
+                        });
+                    }
+                    updateAnalysis();
                 }
-                updateAnalysis();
-            }
 
-            if (data.msg_type === 'tick') {
-                const digit = extractLastDigit(data.tick.quote);
-                ticksHistory.push(digit);
-                if (ticksHistory.length > 500) ticksHistory.shift();
-                latestDigitEl.textContent = digit;
-                updateAnalysis();
-            }
-        };
+                if (data.msg_type === 'tick') {
+                    const digit = extractLastDigit(data.tick.quote);
+                    ticksHistory.push(digit);
+                    if (ticksHistory.length > 500) ticksHistory.shift();
+                    latestDigitEl.textContent = digit;
+                    updateAnalysis();
+                }
+            };
 
-        ws.onerror = function(error) {
-            connectionStatus.textContent = "Error";
-            connectionStatus.className = "connection-status";
-        };
+            ws.onerror = function(error) {
+                connectionStatus.textContent = "Error";
+                connectionStatus.className = "connection-status status-disconnected";
+            };
 
-        ws.onclose = function() {
-            connectionStatus.textContent = "Disconnected";
-            connectionStatus.className = "connection-status";
-        };
+            ws.onclose = function() {
+                connectionStatus.textContent = "Disconnected";
+                connectionStatus.className = "connection-status status-disconnected";
+            };
 
-    } catch (e) {
-        connectionStatus.textContent = "Failed";
-    }
-}
-
-
-        ws.onerror = () => { connectionStatus.textContent = "Error"; connectionStatus.className = "connection-status status-disconnected"; };
-        ws.onclose = () => { connectionStatus.textContent = "Disconnected"; connectionStatus.className = "connection-status status-disconnected"; };
+        } catch (e) {
+            connectionStatus.textContent = "Failed";
+            connectionStatus.className = "connection-status status-disconnected";
+        }
     }
 
     function extractLastDigit(priceString) {
         return parseInt(priceString.toString().slice(-1), 10);
-    }
-
-    function subscribeToTicks(symbol) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ ticks: symbol }));
-        }
     }
 
     function updateAnalysis() {
@@ -273,9 +264,9 @@
         cum89El.textContent = pct89.toFixed(1) + '%';
         cum59El.textContent = pct59.toFixed(1) + '%';
 
-        // --- UPDATED THRESHOLD & WARNING LOGIC ---
+        // --- THRESHOLD & WARNING LOGIC ---
 
-        // Low Side (Over 1 setup)
+        // Low Side (Over 1 setup: Trigger when 0&1 <= 19% and 0-4 <= 49%)
         if (pct04 > 50.0) {
             lowAlert.className = "alert-box alert-warning";
             lowAlert.textContent = "WARNING: 0-4 > 50% (Trending Up! Stop/Do Not Recover)";
@@ -287,7 +278,7 @@
             lowAlert.textContent = "Status: Normal (Balanced)";
         }
 
-        // High Side (Under 8 setup)
+        // High Side (Under 8 setup: Trigger when 8&9 <= 19% and 5-9 <= 49%)
         if (pct59 > 50.0) {
             highAlert.className = "alert-box alert-warning";
             highAlert.textContent = "WARNING: 5-9 > 50% (Trending Up! Stop/Do Not Recover)";
